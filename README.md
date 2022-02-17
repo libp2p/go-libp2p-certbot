@@ -25,11 +25,12 @@ Using this option means that you agree with LetsEncrypt's legal documents.
 import ma "github.com/multiformats/go-multiaddr"
 
 
+cb, _ := New()
 addrs := []ma.Multiaddr{
 	ma.StringCast("/ip4/127.0.0.1/tcp/1234"), // multiaddrs without a domain name are ignored
 	ma.StringCast("/dns4/example.com/tcp/1234"),
 }
-cb, _ := New(WithAddresses(addrs))
+cb.AddAddrs(addrs)
 // after completion of the ACME challenge, the config will contain a certificate for example.com
 tlsConf := cb.GetTLSConfig()
 ```

@@ -1,6 +1,7 @@
 package certbot
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -10,12 +11,12 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
-	ma "github.com/multiformats/go-multiaddr"
-
 	"github.com/caddyserver/certmagic"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,23 +24,37 @@ func init() {
 	certmagic.DefaultACME.CA = certmagic.LetsEncryptStagingCA
 }
 
-func TestInitializeFromDomains(t *testing.T) {
-	m, err := New(WithDomains("libp2p.io", "ipfs.io", "libp2p.io"))
+func TestAddMultiaddrs(t *testing.T) {
+	m, err := New()
 	require.NoError(t, err)
 	defer m.Close()
-	require.ElementsMatch(t, m.domains, []string{"ipfs.io", "libp2p.io"})
-}
 
-func TestInitializeFromMultiaddrs(t *testing.T) {
-	m, err := New(WithAddresses(
+	var mx sync.Mutex
+	var domains []string
+	m.obtainCert = func(_ context.Context, domain string) error {
+		mx.Lock()
+		domains = append(domains, domain)
+		mx.Unlock()
+		return nil
+	}
+
+	m.AddAddrs([]ma.Multiaddr{
 		ma.StringCast("/ip4/127.0.0.1/tcp/1234"),
 		ma.StringCast("/dns4/libp2p.io/tcp/443"),
+		ma.StringCast("/dns4/libp2p.io/tcp/444"), // duplicate domain, expect to be deduped
 		ma.StringCast("/ip6/2001:db8::8a2e:370:7334/udp/1234/quic"),
 		ma.StringCast("/dns6/ipfs.io/tcp/443"),
-	))
-	require.NoError(t, err)
-	defer m.Close()
-	require.ElementsMatch(t, m.domains, []string{"ipfs.io", "libp2p.io"})
+	})
+	m.AddAddrs([]ma.Multiaddr{
+		ma.StringCast("/dns4/docs.libp2p.io/tcp/443"),
+		ma.StringCast("/dns4/libp2p.io/tcp/444"), // duplicate domain, expect to be deduped
+	})
+	require.Eventually(t, func() bool {
+		mx.Lock()
+		defer mx.Unlock()
+		return len(domains) == 3
+	}, time.Second, 10*time.Millisecond)
+	require.ElementsMatch(t, domains, []string{"ipfs.io", "libp2p.io", "docs.libp2p.io"})
 }
 
 func TestImportKeyAndCert(t *testing.T) {
