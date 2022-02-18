@@ -12,7 +12,27 @@ import (
 
 var log = logging.Logger("certbot")
 
-type Option func(*CertManager) error
+type config struct {
+	httpPort, tlsPort int
+}
+
+type Option func(*config) error
+
+// WithHTTPPort sets an alternate port to use for the ACME HTTP challenge.
+func WithHTTPPort(port int) Option {
+	return func(c *config) error {
+		c.httpPort = port
+		return nil
+	}
+}
+
+// WithTLSPort sets an alternate port to use for the ACME TLS ALPN challenge.
+func WithTLSPort(port int) Option {
+	return func(c *config) error {
+		c.tlsPort = port
+		return nil
+	}
+}
 
 var (
 	dns4Protocol = ma.ProtocolWithCode(ma.P_DNS4)
@@ -38,19 +58,30 @@ type CertManager struct {
 // Using the ACME functionality in this package means that
 // you've read and agree to your CA's legal documents.
 func New(opts ...Option) (*CertManager, error) {
+	var conf config
+	for _, opt := range opts {
+		if err := opt(&conf); err != nil {
+			return nil, err
+		}
+	}
+	cfg := certmagic.NewDefault()
+	acmeManager := certmagic.NewACMEManager(
+		cfg,
+		certmagic.ACMEManager{
+			AltHTTPPort:    conf.httpPort,
+			AltTLSALPNPort: conf.tlsPort,
+			Agreed:         true,
+		},
+	)
+	cfg.Issuers = []certmagic.Issuer{acmeManager}
+
 	m := &CertManager{
-		certmagicCfg: certmagic.NewDefault(),
+		certmagicCfg: cfg,
 		incoming:     make(chan struct{}, 1),
 	}
 	m.ctx, m.ctxCancel = context.WithCancel(context.Background())
 	m.obtainCert = func(ctx context.Context, domain string) error {
 		return m.certmagicCfg.ManageSync(ctx, []string{domain})
-	}
-
-	for _, opt := range opts {
-		if err := opt(m); err != nil {
-			return nil, err
-		}
 	}
 
 	m.refCount.Add(1)
