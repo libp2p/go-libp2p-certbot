@@ -1,4 +1,4 @@
-module github.com/marten-seemann/go-libp2p-certbot
+module github.com/libp2p/go-libp2p-certbot
 
 go 1.16
 
