@@ -31,11 +31,10 @@ func TestAddMultiaddrs(t *testing.T) {
 
 	var mx sync.Mutex
 	var domains []string
-	m.obtainCert = func(_ context.Context, domain string) error {
+	m.obtainCert = func(_ context.Context, s []string) {
 		mx.Lock()
-		domains = append(domains, domain)
+		domains = append(domains, s...)
 		mx.Unlock()
-		return nil
 	}
 
 	m.AddAddrs([]ma.Multiaddr{
