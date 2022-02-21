@@ -3,6 +3,7 @@ package certbot
 import (
 	"context"
 	"crypto/tls"
+	"os"
 	"sync"
 
 	"github.com/caddyserver/certmagic"
@@ -65,14 +66,15 @@ func New(opts ...Option) (*CertManager, error) {
 		}
 	}
 	cfg := certmagic.NewDefault()
-	acmeManager := certmagic.NewACMEManager(
-		cfg,
-		certmagic.ACMEManager{
-			AltHTTPPort:    conf.httpPort,
-			AltTLSALPNPort: conf.tlsPort,
-			Agreed:         true,
-		},
-	)
+	tmpl := certmagic.ACMEManager{
+		AltHTTPPort:    conf.httpPort,
+		AltTLSALPNPort: conf.tlsPort,
+		Agreed:         true,
+	}
+	if os.Getenv("LIBP2P_CERTBOT_STAGING") != "" {
+		tmpl.CA = certmagic.LetsEncryptStagingCA
+	}
+	acmeManager := certmagic.NewACMEManager(cfg, tmpl)
 	cfg.Issuers = []certmagic.Issuer{acmeManager}
 
 	m := &CertManager{

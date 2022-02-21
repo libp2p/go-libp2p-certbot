@@ -34,3 +34,7 @@ cb.AddAddrs(addrs)
 // after completion of the ACME challenge, the config will contain a certificate for example.com
 tlsConf := cb.GetTLSConfig()
 ```
+
+#### Testing
+
+Set the `LIBP2P_CERTBOT_STAGING` environment variable to use the LetsEncrypt staging CA instead of the production CA. This will prevent running into rate limits. Keep in mind that the staging CA doesn't issue trusted certificates.
