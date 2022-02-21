@@ -47,8 +47,8 @@ type CertManager struct {
 	refCount  sync.WaitGroup
 
 	certmagicCfg *certmagic.Config
-	// So we can mock the call to certmagicCfg.ManageSync in tests.
-	obtainCert func(context.Context, string) error
+	// So we can mock the call to certmagicCfg.ManageAsync in tests.
+	obtainCert func(context.Context, []string)
 
 	mutex    sync.Mutex
 	queue    []string
@@ -82,8 +82,10 @@ func New(opts ...Option) (*CertManager, error) {
 		incoming:     make(chan struct{}, 1),
 	}
 	m.ctx, m.ctxCancel = context.WithCancel(context.Background())
-	m.obtainCert = func(ctx context.Context, domain string) error {
-		return m.certmagicCfg.ManageSync(ctx, []string{domain})
+	m.obtainCert = func(ctx context.Context, domains []string) {
+		if err := m.certmagicCfg.ManageAsync(ctx, domains); err != nil {
+			log.Debugf("failed to async manage certificate for domain: %v", domains)
+		}
 	}
 
 	m.refCount.Add(1)
@@ -107,25 +109,20 @@ func (m *CertManager) background() {
 		m.queue = nil
 		m.mutex.Unlock()
 
+		var newDomains []string
 		for _, domain := range queue {
 			// We already tried obtaining a certificate for this domain.
 			if _, ok := domains[domain]; ok {
 				continue
 			}
-			// Call ManageSync for every domain separately.
-			// Otherwise, a single failing domain will abort certificate retrieval for _all_ domains.
-			if err := m.obtainCert(m.ctx, domain); err != nil {
-				log.Infof("managing certificate for %s failed: %s", domain, err)
-			}
+			newDomains = append(newDomains, domain)
 			domains[domain] = struct{}{}
-			log.Debugf("successfully obtained / renewed certificate for %s", domain)
-
-			select {
-			case <-m.ctx.Done():
-				return
-			default:
-			}
 		}
+		if len(newDomains) == 0 {
+			continue
+		}
+		m.obtainCert(m.ctx, newDomains)
+		log.Debugf("obtaining certificates for %v", newDomains)
 	}
 }
 
