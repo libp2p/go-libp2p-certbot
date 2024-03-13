@@ -2,7 +2,6 @@ module github.com/libp2p/go-libp2p-certbot
 
 go 1.21
 
-
 require (
 	github.com/caddyserver/certmagic v0.15.3
 	github.com/ipfs/go-log/v2 v2.5.0
